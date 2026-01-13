@@ -1,5 +1,7 @@
+
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -556,6 +558,31 @@
         </div>
     </div>
 
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <h3>⚙️ GitHub Storage Setup</h3>
+            <p style="font-size: 12px; color: #666; margin-bottom: 1rem;">Connect directly to your GitHub repository to store data.</p>
+            <div class="form-group">
+                <label>GitHub Username</label>
+                <input type="text" id="ghOwner" placeholder="e.g., yourusername">
+            </div>
+            <div class="form-group">
+                <label>Repository Name</label>
+                <input type="text" id="ghRepo" placeholder="e.g., school-issue-tracker">
+            </div>
+            <div class="form-group">
+                <label>Personal Access Token (PAT)</label>
+                <input type="password" id="ghToken" placeholder="ghp_...">
+                <small style="color: #dc3545;">⚠️ Token must have 'repo' scope permission.</small>
+            </div>
+            <div style="display: flex; gap: 1rem;">
+                <button class="btn btn-primary" onclick="saveSettings()">💾 Save & Connect</button>
+                <button class="btn btn-warning" onclick="closeSettings()">❌ Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script>
@@ -572,77 +599,92 @@
             'normal': 'Avinash'
         };
 
-        const API = location.origin;
+        // ================= GITHUB STORAGE LOGIC =================
+        // WARNING: Token is exposed in client-side code.
+        const GITHUB_TOKEN = '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'; 
+        const GITHUB_OWNER = 'dhruv021108'; 
+        const GITHUB_REPO = 'school-issue-local-server';
         
-        // ================= GITHUB STORAGE CONFIG =================
-        // WARNING: Token is exposed in client-side code - not secure for production!
-        const GITHUB_TOKEN = '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'; // Replace with your actual token
-        const GITHUB_REPO = 'dhruv021108/school-issue-local-server'; // Replace with your username/repo
-        const GITHUB_FILE_PATH = 'issues.json';
-        const GITHUB_API_BASE = `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`;
-        const headers = {
-            'Authorization': `Bearer ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
-        };
+        let currentSha = null; // Needed to update files on GitHub
 
-        // ================= GITHUB STORAGE FUNCTIONS =================
+        // Placeholder functions for removed UI elements
+        function openSettings() {}
+        function closeSettings() {}
+        function saveSettings() {}
 
-        async function getGithubData() {
+        async function getIssues() {
+            const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/issues.json`;
             try {
-                const response = await fetch(GITHUB_API_BASE, { headers });
-                if (response.status === 404) return { issues: [], sha: null };
-                if (!response.ok) throw new Error(`GitHub API Error: ${response.statusText}`);
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `token ${GITHUB_TOKEN}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    },
+                    cache: "no-store"
+                });
+
+                if (response.status === 404) return []; // File doesn't exist yet
+                if (!response.ok) throw new Error('GitHub API Error');
+
                 const data = await response.json();
-                const content = Buffer.from(data.content, 'base64').toString('utf-8');
-                return { issues: JSON.parse(content), sha: data.sha };
+                currentSha = data.sha;
+                // Decode Base64 content from GitHub
+                const content = decodeURIComponent(escape(window.atob(data.content)));
+                return JSON.parse(content);
             } catch (error) {
-                console.error("Error reading from GitHub:", error);
-                return { issues: [], sha: null };
+                console.error('Error fetching issues:', error);
+                return [];
             }
         }
 
-        async function saveGithubData(issues, sha) {
-            const content = btoa(JSON.stringify(issues, null, 2));
+        async function saveToGithub(issues) {
+            const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/issues.json`;
+            // Encode content to Base64 (handling unicode/emojis correctly)
+            const content = window.btoa(unescape(encodeURIComponent(JSON.stringify(issues, null, 2))));
+            
             const body = {
-                message: 'Update issues database',
-                content: content,
-                sha: sha
+                message: "Update issues database",
+                content: content
             };
-            const response = await fetch(GITHUB_API_BASE, {
+            if (currentSha) body.sha = currentSha;
+
+            const response = await fetch(url, {
                 method: 'PUT',
-                headers,
+                headers: {
+                    'Authorization': `token ${GITHUB_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify(body)
             });
-            if (!response.ok) throw new Error(`GitHub Save Error: ${await response.text()}`);
-        }
 
-        async function getIssues() {
-            const { issues } = await getGithubData();
-            return issues;
+            if (!response.ok) {
+                const err = await response.text();
+                throw new Error('GitHub Save Failed: ' + err);
+            }
+            
+            const data = await response.json();
+            currentSha = data.content.sha; // Update SHA for next save
         }
 
         async function addIssue(issue) {
-            const { issues, sha } = await getGithubData();
+            const issues = await getIssues();
             issues.push(issue);
-            await saveGithubData(issues, sha);
+            await saveToGithub(issues);
         }
 
         async function updateIssue(updatedIssue) {
-            const { issues, sha } = await getGithubData();
+            const issues = await getIssues();
             const index = issues.findIndex(i => i.id === updatedIssue.id);
             if (index !== -1) {
                 issues[index] = updatedIssue;
-                await saveGithubData(issues, sha);
-            } else {
-                throw new Error('Issue not found');
+                await saveToGithub(issues);
             }
         }
 
         async function deleteIssue(id) {
-            const { issues, sha } = await getGithubData();
-            const newIssues = issues.filter(i => i.id !== id);
-            await saveGithubData(newIssues, sha);
+            let issues = await getIssues();
+            issues = issues.filter(i => i.id !== id);
+            await saveToGithub(issues);
         }
 
         async function loadAllIssues() {
