@@ -427,7 +427,7 @@
                     <p id="userGreeting"></p>
                 </div>
                 <div style="display: flex; gap: 1rem;">
-                    <button class="logout-btn" onclick="openSettings()">⚙️ Settings</button>
+                    <button id="settingsBtn" class="logout-btn" onclick="openSettings()">⚙️ Settings</button>
                     <button class="logout-btn" onclick="logout()">🚪 Logout</button>
                 </div>
             </div>
@@ -781,6 +781,7 @@
             }
             
             document.getElementById('userGreeting').textContent = greeting;
+            document.getElementById('settingsBtn').style.display = currentMode === 'admin' ? 'block' : 'none';
             updateStats();
             displayIssues();
         }
@@ -1198,7 +1199,7 @@
 
             try {
                 const { jsPDF } = window.jspdf;
-                const pdf = new JS PDF('l', 'mm', 'a4');
+                const pdf = new jsPDF('l', 'mm', 'a4');
                 
                 pdf.setFontSize(18);
                 pdf.text('📊 Admin System Report', 20, 20);
