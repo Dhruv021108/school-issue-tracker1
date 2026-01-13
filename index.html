@@ -37,6 +37,7 @@
         .login-page h1 {
             font-size: 2.5rem;
             background: linear-gradient(45deg, #667eea, #764ba2);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 0.5rem;
@@ -600,19 +601,53 @@
         };
 
         // ================= GITHUB STORAGE LOGIC =================
-        // WARNING: Token is exposed in client-side code.
-        const GITHUB_TOKEN = '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'; 
-        const GITHUB_OWNER = 'dhruv021108'; 
-        const GITHUB_REPO = 'school-issue-local-server';
+        // Load credentials from localStorage to avoid hardcoding and revocation
+        let GITHUB_TOKEN = localStorage.getItem('gh_token') || ''; 
+        let GITHUB_OWNER = localStorage.getItem('gh_owner') || 'dhruv021108'; 
+        let GITHUB_REPO = localStorage.getItem('gh_repo') || 'school-issue-tracker1';
         
         let currentSha = null; // Needed to update files on GitHub
 
-        // Placeholder functions for removed UI elements
-        function openSettings() {}
-        function closeSettings() {}
-        function saveSettings() {}
+        function openSettings() {
+            document.getElementById('ghOwner').value = GITHUB_OWNER;
+            document.getElementById('ghRepo').value = GITHUB_REPO;
+            document.getElementById('ghToken').value = GITHUB_TOKEN;
+            document.getElementById('settingsModal').classList.add('active');
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.remove('active');
+        }
+
+        function saveSettings() {
+            const owner = document.getElementById('ghOwner').value.trim();
+            const repo = document.getElementById('ghRepo').value.trim();
+            const token = document.getElementById('ghToken').value.trim();
+
+            if (!owner || !repo || !token) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            localStorage.setItem('gh_owner', owner);
+            localStorage.setItem('gh_repo', repo);
+            localStorage.setItem('gh_token', token);
+
+            GITHUB_OWNER = owner;
+            GITHUB_REPO = repo;
+            GITHUB_TOKEN = token;
+
+            closeSettings();
+            alert('✅ Settings saved! Connecting to GitHub...');
+            displayIssues();
+        }
 
         async function getIssues() {
+            if (!GITHUB_TOKEN) {
+                if (currentUser) alert('⚠️ Please configure GitHub Settings to save data!');
+                return [];
+            }
+
             const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/issues.json`;
             try {
                 const response = await fetch(url, {
@@ -638,6 +673,12 @@
         }
 
         async function saveToGithub(issues) {
+            if (!GITHUB_TOKEN) {
+                alert('⚠️ Please configure GitHub Settings first!');
+                openSettings();
+                throw new Error('No token configured');
+            }
+
             const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/issues.json`;
             // Encode content to Base64 (handling unicode/emojis correctly)
             const content = window.btoa(unescape(encodeURIComponent(JSON.stringify(issues, null, 2))));
